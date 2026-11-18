@@ -1,0 +1,36 @@
+# --- Secrets et configuration locale ---
+.env
+*.pem
+*.key
+
+# --- Java / Maven ---
+target/
+*.class
+*.jar
+*.log
+hs_err_pid*
+
+# --- IntelliJ IDEA ---
+.idea/
+*.iml
+out/
+
+# --- Android / Gradle ---
+mobile/.gradle/
+mobile/build/
+mobile/app/build/
+mobile/local.properties
+mobile/app/google-services.json
+*.apk
+*.aab
+.gradle/
+.kotlin/
+
+# --- Docker (données locales éventuelles) ---
+pgdata/
+tsdata/
+
+# --- Windows / divers ---
+Thumbs.db
+Desktop.ini
+.DS_Store
