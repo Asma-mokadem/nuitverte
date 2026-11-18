@@ -15,6 +15,7 @@ travail, pas des mesures réelles. Elles ne reproduisent aucune interface réell
 | Micro-coupure (définition) | tension absente moins de 5 s | Reco | Distingue d'une vraie coupure |
 | Coupure totale (définition) | tension absente 5 s ou plus | Reco | Complément de la ligne précédente |
 | Sous-tension persistante | encore présente 60 s après la réduction de puissance | Reco | Le PDF dit « si ça persiste » sans durée |
+| Puissance réduite en sous-tension | 50 % de la puissance nominale | Reco | Compromis entre protection et poursuite de la charge |
 
 ## 2. Reprise après coupure
 | Paramètre | Valeur | Origine |
