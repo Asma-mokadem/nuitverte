@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package nuitverte.grid.v1;
+
+option java_multiple_files = true;
+option java_package = "com.nuitverte.grid.grpc";
+
+// Statuts : NOT_FOUND (zone inconnue), INVALID_ARGUMENT, UNAVAILABLE, DEADLINE_EXCEEDED.
+
+service GridQuality {
+  rpc GetZoneStability(ZoneRequest) returns (StabilityResponse);    // unaire
+  rpc WatchGridAlerts(ZoneRequest) returns (stream GridAlert);      // streaming serveur
+  rpc IngestMeasures(stream GridMeasure) returns (IngestAck);       // streaming client (ajout Reco 0.3)
+}
+
+enum AlertType {
+  ALERT_TYPE_UNSPECIFIED = 0;
+  OUTAGE = 1;
+  UNDERVOLTAGE = 2;
+  OVERVOLTAGE = 3;
+  FLICKER = 4;
+  POWER_RESTORED = 5;
+}
+
+message ZoneRequest {
+  string zone_id = 1;
+}
+
+message StabilityResponse {
+  string zone_id = 1;
+  int32 stability_index = 2;    // 0 à 100, 100 = très stable
+  bool unstable = 3;            // vrai si l'indice est inférieur à 50
+}
+
+message GridAlert {
+  string zone_id = 1;
+  AlertType type = 2;
+  double voltage_v = 3;
+  int64 timestamp = 4;
+}
+
+message GridMeasure {
+  string zone_id = 1;
+  double voltage_v = 2;
+  double frequency_hz = 3;
+  int64 timestamp = 4;
+}
+
+message IngestAck {
+  int64 received = 1;
+}

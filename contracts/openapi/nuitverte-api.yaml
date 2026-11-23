@@ -1,0 +1,467 @@
+openapi: 3.0.3
+info:
+  title: NuitVerte API
+  version: 1.0.0
+  description: API REST consommée par le mobile, exposée par l'API Gateway. Versionnée sous /api/v1.
+servers:
+  - url: http://localhost:8083
+    description: Gateway locale (émulateur Android, http://10.0.2.2:8080)
+tags:
+  - name: Customers
+  - name: Plans
+  - name: Sessions
+  - name: Tariffs
+  - name: Notifications
+  - name: Zones
+
+paths:
+  /api/v1/customers:
+    post:
+      tags: [Customers]
+      summary: Créer un compte foyer
+      operationId: createCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerCreate' }
+      responses:
+        '201':
+          description: Foyer créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/vehicles:
+    post:
+      tags: [Customers]
+      summary: Enregistrer un véhicule
+      operationId: createVehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VehicleCreate' }
+      responses:
+        '201':
+          description: Véhicule créé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vehicle' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/devices:
+    post:
+      tags: [Notifications]
+      summary: Enregistrer le jeton de notification de l'appareil
+      operationId: registerDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceCreate' }
+      responses:
+        '201':
+          description: Appareil enregistré
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /api/v1/charging-plans:
+    post:
+      tags: [Plans]
+      summary: Créer un plan de charge
+      operationId: createChargingPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChargingPlanCreate' }
+      responses:
+        '201':
+          description: Plan créé (degraded=true si l'opérateur est indisponible)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChargingPlan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/charging-plans/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Plans]
+      summary: Consulter un plan
+      operationId: getChargingPlan
+      responses:
+        '200':
+          description: Plan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChargingPlan' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Plans]
+      summary: Modifier l'heure ou le niveau (déclenche une replanification)
+      operationId: updateChargingPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChargingPlanPatch' }
+      responses:
+        '200':
+          description: Plan replanifié
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChargingPlan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Plans]
+      summary: Annuler un plan (état ANNULEE)
+      operationId: cancelChargingPlan
+      responses:
+        '204': { description: Plan annulé }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/charging-plans/{id}/overrides:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Plans]
+      summary: Demander une charge immédiate
+      operationId: overrideChargingPlan
+      responses:
+        '202':
+          description: Demande acceptée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionStatus' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/v1/sessions/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Sessions]
+      summary: État d'une session
+      operationId: getSessionStatus
+      responses:
+        '200':
+          description: État courant
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionStatus' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/sessions/{id}/measures:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Sessions]
+      summary: Dernières mesures pour la courbe
+      operationId: getSessionMeasures
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 600, default: 60 }
+      responses:
+        '200':
+          description: Mesures (stale=true si données anciennes ou repli)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeasuresResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/sessions/{id}/events:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Sessions]
+      summary: Flux d'événements (Server-Sent Events, types status et alert)
+      operationId: streamSessionEvents
+      responses:
+        '200':
+          description: Flux SSE, chaque événement porte un JSON SessionStatus ou Notification
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/customers/{id}/savings:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Customers]
+      summary: Économie réalisée
+      operationId: getSavings
+      responses:
+        '200':
+          description: Économies
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Savings' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/zones/{id}/stability:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, example: ZONE-A1 }
+    get:
+      tags: [Zones]
+      summary: Indice de stabilité de la zone
+      operationId: getZoneStability
+      responses:
+        '200':
+          description: Indice
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ZoneStability' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/tariffs/today:
+    get:
+      tags: [Tariffs]
+      summary: Grille tarifaire du jour (à mettre en cache côté mobile)
+      operationId: getTodayTariffs
+      responses:
+        '200':
+          description: Grille du jour
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TariffGrid' }
+
+  /api/v1/notifications:
+    get:
+      tags: [Notifications]
+      summary: Historique des notifications
+      operationId: listNotifications
+      parameters:
+        - name: customerId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Liste
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: Requête invalide (validation)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Ressource introuvable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Conflit d'état ou objectif impossible
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [status, error, message]
+      properties:
+        timestamp: { type: string, format: date-time }
+        status: { type: integer, example: 409 }
+        error: { type: string, example: Conflict }
+        message: { type: string, example: Réseau instable dans la zone }
+        path: { type: string }
+        details:
+          type: array
+          items: { type: string }
+        realisticLevelPct:
+          type: integer
+          nullable: true
+          description: Niveau atteignable à l'heure de départ (cas d'un objectif impossible)
+
+    CustomerCreate:
+      type: object
+      required: [name, email, homeZoneId]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        email: { type: string, format: email }
+        homeZoneId: { type: string, pattern: '^ZONE-[A-Z0-9]{2,8}$', example: ZONE-A1 }
+    Customer:
+      allOf:
+        - $ref: '#/components/schemas/CustomerCreate'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+
+    VehicleCreate:
+      type: object
+      required: [customerId, batteryCapacityKwh, chargerMaxPowerKw]
+      properties:
+        customerId: { type: string, format: uuid }
+        batteryCapacityKwh: { type: number, minimum: 10, maximum: 200, example: 50 }
+        chargerMaxPowerKw: { type: number, minimum: 1, maximum: 22, example: 7 }
+        consumptionKwhPer100km: { type: number, example: 16 }
+    Vehicle:
+      allOf:
+        - $ref: '#/components/schemas/VehicleCreate'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+
+    DeviceCreate:
+      type: object
+      required: [customerId, token]
+      properties:
+        customerId: { type: string, format: uuid }
+        token: { type: string, minLength: 8 }
+        platform: { type: string, enum: [ANDROID], default: ANDROID }
+    Device:
+      allOf:
+        - $ref: '#/components/schemas/DeviceCreate'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+
+    ChargingPlanCreate:
+      type: object
+      required: [customerId, vehicleId, departureTime, targetLevelPct]
+      properties:
+        customerId: { type: string, format: uuid }
+        vehicleId: { type: string, format: uuid }
+        departureTime: { type: string, format: date-time }
+        targetLevelPct: { type: integer, minimum: 20, maximum: 100, example: 90 }
+        currentLevelPct: { type: integer, minimum: 0, maximum: 100, default: 20 }
+    ChargingPlanPatch:
+      type: object
+      minProperties: 1
+      properties:
+        departureTime: { type: string, format: date-time }
+        targetLevelPct: { type: integer, minimum: 20, maximum: 100 }
+
+    Slot:
+      type: object
+      properties:
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
+        powerKw: { type: number }
+        pricePerKwh: { type: number }
+    ChargingPlan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        vehicleId: { type: string, format: uuid }
+        state: { $ref: '#/components/schemas/SessionState' }
+        departureTime: { type: string, format: date-time }
+        targetLevelPct: { type: integer }
+        slots:
+          type: array
+          items: { $ref: '#/components/schemas/Slot' }
+        estimatedCost: { type: number }
+        estimatedSavings: { type: number }
+        currency: { type: string, example: TND }
+        degraded:
+          type: boolean
+          description: true si le tarif est estimé (opérateur indisponible)
+
+    SessionState:
+      type: string
+      enum: [PLANIFIEE, EN_COURS, SUSPENDUE, TERMINEE, ECHEC, ANNULEE]
+
+    SessionStatus:
+      type: object
+      properties:
+        sessionId: { type: string, format: uuid }
+        planId: { type: string, format: uuid }
+        state: { $ref: '#/components/schemas/SessionState' }
+        batteryLevelPct: { type: number }
+        targetLevelPct: { type: integer }
+        currentPowerKw: { type: number }
+        powerLimitPct: { type: integer, example: 100 }
+        expectedEndTime: { type: string, format: date-time }
+        lastMeasureAt: { type: string, format: date-time }
+        stale:
+          type: boolean
+          description: true si aucune mesure depuis 30 s (données anciennes, sans conclure à une panne)
+        lastAlert: { type: string, nullable: true }
+
+    Measure:
+      type: object
+      properties:
+        chargerId: { type: string }
+        powerKw: { type: number }
+        voltageV: { type: number }
+        frequencyHz: { type: number }
+        timestamp: { type: integer, format: int64, description: millisecondes depuis 1970 }
+    MeasuresResponse:
+      type: object
+      properties:
+        sessionId: { type: string, format: uuid }
+        stale: { type: boolean }
+        measures:
+          type: array
+          items: { $ref: '#/components/schemas/Measure' }
+
+    Savings:
+      type: object
+      properties:
+        customerId: { type: string, format: uuid }
+        todayAmount: { type: number }
+        cumulativeAmount: { type: number }
+        currency: { type: string, example: TND }
+
+    ZoneStability:
+      type: object
+      properties:
+        zoneId: { type: string }
+        stabilityIndex: { type: integer, minimum: 0, maximum: 100 }
+        unstable: { type: boolean }
+
+    TariffGrid:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        currency: { type: string, example: TND }
+        degraded: { type: boolean }
+        hours:
+          type: array
+          items:
+            type: object
+            properties:
+              startHour: { type: integer, minimum: 0, maximum: 24 }
+              endHour: { type: integer, minimum: 0, maximum: 24 }
+              pricePerKwh: { type: number }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        type: { type: string, enum: [OUTAGE, UNDERVOLTAGE, OVERVOLTAGE, FLICKER, POWER_RESTORED, INFO] }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }

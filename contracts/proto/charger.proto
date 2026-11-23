@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package nuitverte.charger.v1;
+
+option java_multiple_files = true;
+option java_package = "com.nuitverte.charger.grpc";
+
+// Statuts gRPC utilisés par ce service :
+//   FAILED_PRECONDITION : charge impossible (tension instable)
+//   NOT_FOUND           : borne ou session inconnue
+//   INVALID_ARGUMENT    : requête mal formée
+//   UNAVAILABLE         : service momentanément indisponible
+//   DEADLINE_EXCEEDED   : délai client dépassé (deadline posée par le client)
+
+service ChargerControl {
+  rpc StartCharging(StartRequest) returns (StartResponse);          // unaire
+  rpc StopCharging(StopRequest) returns (StopResponse);             // unaire
+  rpc GetRecentMeasures(RecentRequest) returns (MeasureList);       // unaire
+  rpc StreamPower(stream Measure) returns (Ack);                    // streaming client
+  rpc WatchCharge(WatchRequest) returns (stream Measure);           // streaming serveur
+}
+
+message Measure {
+  string charger_id = 1;
+  double power_kw = 2;
+  double voltage_v = 3;
+  double frequency_hz = 4;
+  int64 timestamp = 5;        // millisecondes depuis 1970 (epoch)
+}
+
+message StartRequest {
+  string session_id = 1;
+  string charger_id = 2;
+  double target_power_kw = 3;   // puissance demandée (palier)
+  double battery_capacity_kwh = 4;
+  double target_level_pct = 5;
+}
+
+message StartResponse {
+  bool accepted = 1;
+  string message = 2;
+}
+
+message StopRequest {
+  string session_id = 1;
+  string charger_id = 2;
+  string reason = 3;            // ex. "COUPURE"
+}
+
+message StopResponse {
+  bool stopped = 1;
+  double battery_level_pct = 2;
+}
+
+message RecentRequest {
+  string charger_id = 1;
+  int32 limit = 2;              // nombre de mesures voulues
+}
+
+message MeasureList {
+  repeated Measure measures = 1;
+}
+
+message WatchRequest {
+  string charger_id = 1;
+}
+
+message Ack {
+  int64 received = 1;           // nombre de mesures reçues
+}

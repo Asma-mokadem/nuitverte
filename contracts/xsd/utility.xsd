@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://nuitverte.example/utility/v1"
+           targetNamespace="http://nuitverte.example/utility/v1"
+           elementFormDefault="qualified">
+
+    <!-- ===== Types simples (valeurs contraintes) ===== -->
+
+    <xs:simpleType name="ContratId">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="[A-Z]{2}-[0-9]{6}"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ZoneId">
+        <xs:restriction base="xs:string">
+            <xs:pattern value="ZONE-[A-Z0-9]{2,8}"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="Heure">
+        <xs:restriction base="xs:int">
+            <xs:minInclusive value="0"/>
+            <xs:maxInclusive value="24"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TypeIncident">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="COUPURE"/>
+            <xs:enumeration value="SOUS_TENSION"/>
+            <xs:enumeration value="SURTENSION"/>
+            <xs:enumeration value="MICRO_COUPURES"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- ===== Types complexes (objets métier) ===== -->
+
+    <xs:complexType name="Contrat">
+        <xs:sequence>
+            <xs:element name="contratId" type="tns:ContratId"/>
+            <xs:element name="zoneId" type="tns:ZoneId"/>
+            <xs:element name="puissanceSouscriteKw" type="xs:decimal"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TarifHoraire">
+        <xs:sequence>
+            <xs:element name="heureDebut" type="tns:Heure"/>
+            <xs:element name="heureFin" type="tns:Heure"/>
+            <xs:element name="prixKwh" type="xs:decimal"/>
+            <xs:element name="devise" type="xs:string" default="TND"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="CoupureProgrammee">
+        <xs:sequence>
+            <xs:element name="zoneId" type="tns:ZoneId"/>
+            <xs:element name="debut" type="xs:dateTime"/>
+            <xs:element name="fin" type="xs:dateTime"/>
+            <xs:element name="motif" type="xs:string" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="Incident">
+        <xs:sequence>
+            <xs:element name="zoneId" type="tns:ZoneId"/>
+            <xs:element name="type" type="tns:TypeIncident"/>
+            <xs:element name="debut" type="xs:dateTime"/>
+            <xs:element name="fin" type="xs:dateTime" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- ===== Opération 1 : ConsulterTarifHoraire ===== -->
+
+    <xs:element name="ConsulterTarifHoraireRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="contratId" type="tns:ContratId"/>
+                <xs:element name="date" type="xs:date"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="ConsulterTarifHoraireResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="tarif" type="tns:TarifHoraire" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ===== Opération 2 : ConsulterCoupuresProgrammees ===== -->
+
+    <xs:element name="ConsulterCoupuresProgrammeesRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="zoneId" type="tns:ZoneId"/>
+                <xs:element name="date" type="xs:date"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="ConsulterCoupuresProgrammeesResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="coupure" type="tns:CoupureProgrammee"
+                            minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ===== Opération 3 : DeclarerConsommation ===== -->
+
+    <xs:element name="DeclarerConsommationRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="contratId" type="tns:ContratId"/>
+                <xs:element name="kwh" type="xs:decimal"/>
+                <xs:element name="periodeDebut" type="xs:dateTime"/>
+                <xs:element name="periodeFin" type="xs:dateTime"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="DeclarerConsommationResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="numeroAccuse" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ===== Opération 4 : DeclarerIncidentReseau ===== -->
+
+    <xs:element name="DeclarerIncidentReseauRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="incident" type="tns:Incident"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="DeclarerIncidentReseauResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="numeroIncident" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ===== Faults métier ===== -->
+
+    <xs:element name="ContratInconnuFault">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="code" type="xs:string"/>
+                <xs:element name="message" type="xs:string"/>
+                <xs:element name="contratId" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="ZoneInconnueFault">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="code" type="xs:string"/>
+                <xs:element name="message" type="xs:string"/>
+                <xs:element name="zoneId" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>
