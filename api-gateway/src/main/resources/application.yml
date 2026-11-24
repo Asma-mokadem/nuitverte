@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: savings
+          uri: "${TARIFF_URL:http://tariff-service:8080}"
+          predicates:
+            - Path=/api/v1/customers/*/savings
+        - id: customers
+          uri: "${CUSTOMER_URL:http://customer-service:8080}"
+          predicates:
+            - Path=/api/v1/customers/**,/api/v1/vehicles/**,/api/v1/devices/**
+        - id: scheduler
+          uri: "${SCHEDULER_URL:http://scheduler-service:8080}"
+          predicates:
+            - Path=/api/v1/charging-plans/**,/api/v1/sessions/**,/api/v1/zones/**
+        - id: tariff
+          uri: "${TARIFF_URL:http://tariff-service:8080}"
+          predicates:
+            - Path=/api/v1/tariffs/**
+        - id: notification
+          uri: "${NOTIFICATION_URL:http://notification-service:8080}"
+          predicates:
+            - Path=/api/v1/notifications/**
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    gateway:
+      enabled: true

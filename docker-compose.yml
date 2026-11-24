@@ -1,0 +1,205 @@
+name: nuitverte
+
+x-app-health: &app-health
+  test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q UP"]
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 40s
+
+networks:
+  nuitverte-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  tsdata:
+
+services:
+  # ---------- Bases de données ----------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir dans .env}
+      CUSTOMER_DB_PASSWORD: ${CUSTOMER_DB_PASSWORD:?définir dans .env}
+      SCHEDULER_DB_PASSWORD: ${SCHEDULER_DB_PASSWORD:?définir dans .env}
+      TARIFF_DB_PASSWORD: ${TARIFF_DB_PASSWORD:?définir dans .env}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:?définir dans .env}
+      UTILITY_DB_PASSWORD: ${UTILITY_DB_PASSWORD:?définir dans .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    networks: [nuitverte-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:?définir dans .env}
+      CHARGER_DB_PASSWORD: ${CHARGER_DB_PASSWORD:?définir dans .env}
+      GRID_DB_PASSWORD: ${GRID_DB_PASSWORD:?définir dans .env}
+    volumes:
+      - tsdata:/var/lib/postgresql/data
+      - ./infra/timescale/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    networks: [nuitverte-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Services techniques ----------
+  utility-gateway-service:
+    build:
+      context: .
+      dockerfile: utility-gateway-service/Dockerfile
+    ports: ["8085:8080"]
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx256m}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/utility
+      SPRING_DATASOURCE_USERNAME: utility
+      SPRING_DATASOURCE_PASSWORD: ${UTILITY_DB_PASSWORD}
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [nuitverte-net]
+    healthcheck: *app-health
+
+  charger-control-service:
+    build:
+      context: .
+      dockerfile: charger-control-service/Dockerfile
+    ports: ["8086:8080"]
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx256m}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://timescaledb:5432/charger
+      SPRING_DATASOURCE_USERNAME: charger
+      SPRING_DATASOURCE_PASSWORD: ${CHARGER_DB_PASSWORD}
+    depends_on:
+      timescaledb: { condition: service_healthy }
+    networks: [nuitverte-net]
+    healthcheck: *app-health
+
+  grid-quality-service:
+    build:
+      context: .
+      dockerfile: grid-quality-service/Dockerfile
+    ports: ["8087:8080"]
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx256m}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://timescaledb:5432/grid
+      SPRING_DATASOURCE_USERNAME: grid
+      SPRING_DATASOURCE_PASSWORD: ${GRID_DB_PASSWORD}
+    depends_on:
+      timescaledb: { condition: service_healthy }
+    networks: [nuitverte-net]
+    healthcheck: *app-health
+
+  # ---------- Services métier REST ----------
+  customer-service:
+    build:
+      context: .
+      dockerfile: customer-service/Dockerfile
+    ports: ["8081:8080"]
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx256m}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/customer
+      SPRING_DATASOURCE_USERNAME: customer
+      SPRING_DATASOURCE_PASSWORD: ${CUSTOMER_DB_PASSWORD}
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [nuitverte-net]
+    healthcheck: *app-health
+
+  tariff-service:
+    build:
+      context: .
+      dockerfile: tariff-service/Dockerfile
+    ports: ["8083:8080"]
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx256m}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tariff
+      SPRING_DATASOURCE_USERNAME: tariff
+      SPRING_DATASOURCE_PASSWORD: ${TARIFF_DB_PASSWORD}
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [nuitverte-net]
+    healthcheck: *app-health
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    ports: ["8084:8080"]
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx256m}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification
+      SPRING_DATASOURCE_USERNAME: notification
+      SPRING_DATASOURCE_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [nuitverte-net]
+    healthcheck: *app-health
+
+  scheduler-service:
+    build:
+      context: .
+      dockerfile: scheduler-service/Dockerfile
+    ports: ["8082:8080"]
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx256m}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scheduler
+      SPRING_DATASOURCE_USERNAME: scheduler
+      SPRING_DATASOURCE_PASSWORD: ${SCHEDULER_DB_PASSWORD}
+      CUSTOMER_URL: http://customer-service:8080
+      TARIFF_URL: http://tariff-service:8080
+      NOTIFICATION_URL: http://notification-service:8080
+      UTILITY_URL: http://utility-gateway-service:8080
+      CHARGER_GRPC_HOST: charger-control-service
+      GRID_GRPC_HOST: grid-quality-service
+    depends_on:
+      postgres: { condition: service_healthy }
+      customer-service: { condition: service_healthy }
+      tariff-service: { condition: service_healthy }
+      notification-service: { condition: service_healthy }
+      utility-gateway-service: { condition: service_healthy }
+      charger-control-service: { condition: service_healthy }
+      grid-quality-service: { condition: service_healthy }
+    networks: [nuitverte-net]
+    healthcheck: *app-health
+
+  # ---------- Simulateur et gateway ----------
+  simulator:
+    build:
+      context: .
+      dockerfile: simulator/Dockerfile
+    ports: ["8090:8080"]
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx256m}
+      CHARGER_GRPC_HOST: charger-control-service
+      GRID_GRPC_HOST: grid-quality-service
+    depends_on:
+      charger-control-service: { condition: service_healthy }
+      grid-quality-service: { condition: service_healthy }
+    networks: [nuitverte-net]
+    healthcheck: *app-health
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    ports: ["8080:8080"]
+    environment:
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx256m}
+    depends_on:
+      customer-service: { condition: service_healthy }
+      scheduler-service: { condition: service_healthy }
+      tariff-service: { condition: service_healthy }
+      notification-service: { condition: service_healthy }
+    networks: [nuitverte-net]
+    healthcheck: *app-health
